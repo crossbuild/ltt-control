@@ -316,10 +316,14 @@ int open_buffer_file(char *filename, char *path_channel, char *path_trace,
 				path_trace);
 
 			fd_pairs->pair[fd_pairs->num_pairs-1].trace = 
-				open(path_trace, O_WRONLY|O_APPEND,
+				open(path_trace, O_WRONLY,
 						S_IRWXU|S_IRWXG|S_IRWXO);
-
 			if(fd_pairs->pair[fd_pairs->num_pairs-1].trace == -1) {
+				perror(path_trace);
+			}
+			ret = lseek(fd_pairs->pair[fd_pairs->num_pairs-1].trace,
+				    0, SEEK_END);
+			if (ret < 0) {
 				perror(path_trace);
 			}
 		} else {
