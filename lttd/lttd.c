@@ -472,14 +472,14 @@ int read_subbuffer(struct fd_pair *pair)
 		printf_verbose("splice chan to pipe offset %lu\n",
 			(unsigned long)offset);
 		ret = splice(pair->channel, &offset, thread_pipe[1], NULL,
-			len, SPLICE_F_MOVE);
+			len, SPLICE_F_MOVE | SPLICE_F_MORE);
 		printf_verbose("splice chan to pipe ret %ld\n", ret);
 		if (ret < 0) {
 			perror("Error in relay splice");
 			goto write_error;
 		}
 		ret = splice(thread_pipe[0], NULL, pair->trace, NULL,
-			ret, SPLICE_F_MOVE);
+			ret, SPLICE_F_MOVE | SPLICE_F_MORE);
 		printf_verbose("splice pipe to file %ld\n", ret);
 		if (ret < 0) {
 			perror("Error in file splice");
