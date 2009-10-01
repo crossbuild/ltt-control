@@ -162,6 +162,7 @@ static int lttctl_check_trace(const char *name, int expect)
 	dir = opendir(tracedirname);
 	if (dir) {
 		exist = 1;
+		closedir(dir);
 	} else {
 		if (errno != ENOENT) {
 			fprintf(stderr, "%s: %s\n", __func__, strerror(errno));
@@ -169,8 +170,6 @@ static int lttctl_check_trace(const char *name, int expect)
 		}
 		exist = 0;
 	}
-
-	closedir(dir);
 
 	if (!expect != !exist) {
 		if (exist)
