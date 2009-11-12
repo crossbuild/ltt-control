@@ -640,6 +640,7 @@ static int __lttctl_set_channel_subbuf_size(const char *name,
 	if (ret)
 		fprintf(stderr, "Set channel's subbuf size failed\n");
 }
+
 int lttctl_set_channel_subbuf_size(const char *name, const char *channel,
 		unsigned subbuf_size)
 {
@@ -675,6 +676,73 @@ int lttctl_set_channel_subbuf_size(const char *name, const char *channel,
 		for (; n_channel > 0; n_channel--) {
 			ret = __lttctl_set_channel_subbuf_size(name,
 				channellist[n_channel - 1], subbuf_size);
+			if (ret)
+				goto op_err_clean;
+		}
+		lttctl_free_channellist(channellist, n_channel);
+	}
+
+	return 0;
+
+op_err_clean:
+	lttctl_free_channellist(channellist, n_channel);
+op_err:
+arg_error:
+	return ret;
+}
+
+static int __lttctl_set_channel_switch_timer(const char *name,
+		const char *channel, unsigned switch_timer)
+{
+	int ret;
+	char ctlfname[PATH_MAX];
+	char opstr[32];
+
+	sprintf(ctlfname, "%s/ltt/control/%s/channel/%s/switch_timer",
+		debugfsmntdir, name, channel);
+
+	sprintf(opstr, "%u", switch_timer);
+
+	ret = lttctl_sendop(ctlfname, opstr);
+	if (ret)
+		fprintf(stderr, "Set channel's switch timer failed\n");
+}
+
+int lttctl_set_channel_switch_timer(const char *name, const char *channel,
+		unsigned switch_timer)
+{
+	int ret;
+	char **channellist;
+	int n_channel;
+
+	if (!name || !channel) {
+		fprintf(stderr, "%s: args invalid\n", __func__);
+		ret = -EINVAL;
+		goto arg_error;
+	}
+
+	ret = lttctl_check_trace(name, 1);
+	if (ret)
+		goto arg_error;
+
+	if (strcmp(channel, "all")) {
+		ret = __lttctl_set_channel_subbuf_size(name, channel,
+			switch_timer);
+		if (ret)
+			goto op_err;
+	} else {
+		/* allow set subbuf_size for metadata channel */
+		n_channel = lttctl_get_channellist(name, &channellist, 1);
+		if (n_channel < 0) {
+			fprintf(stderr, "%s: lttctl_get_channellist failed\n",
+				__func__);
+			ret = -ENOENT;
+			goto op_err;
+		}
+
+		for (; n_channel > 0; n_channel--) {
+			ret = __lttctl_set_channel_switch_timer(name,
+				channellist[n_channel - 1], switch_timer);
 			if (ret)
 				goto op_err_clean;
 		}

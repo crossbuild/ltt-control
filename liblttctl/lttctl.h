@@ -35,6 +35,8 @@ int lttctl_set_channel_subbuf_num(const char *name, const char *channel,
 		unsigned subbuf_num);
 int lttctl_set_channel_subbuf_size(const char *name, const char *channel,
 		unsigned subbuf_size);
+int lttctl_set_channel_switch_timer(const char *name, const char *channel,
+		unsigned switch_timer);
 
 /* Helper functions */
 int getdebugfsmntdir(char *mntdir);

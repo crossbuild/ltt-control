@@ -41,6 +41,7 @@ struct channel_option {
 	int overwrite;
 	int bufnum;
 	int bufsize;
+	int switch_timer;
 };
 
 struct lttctl_option {
@@ -124,6 +125,8 @@ static void show_arguments(void)
 	printf("        channel.<channelname>.bufsize= (in bytes, rounded to "
 	       "next power of 2)\n");
 	printf("        <channelname> can be set to all for all channels\n");
+	printf("        channel.<channelname>.switch_timer= (timer interval in "
+	       "ms)\n");
 	printf("\n");
 	printf(" Integration options:\n");
 	printf("  -C, --create_start\n");
@@ -205,6 +208,7 @@ static void init_channel_opt(struct channel_option *opt, char *opt_name)
 		opt->overwrite = -1;
 		opt->bufnum = -1;
 		opt->bufsize = -1;
+		opt->switch_timer = -1;
 		strcpy(opt->chan_name, opt_name);
 	}
 }
@@ -290,6 +294,14 @@ int set_channel_opt(struct channel_option *opt, char *opt_name, char *opt_valstr
 		}
 		
 		opt->bufsize = opt_val;
+		return 0;
+	} else if (!strcmp("switch_timer", opt_name)) {
+		ret = sscanf(opt_valstr, "%d", &opt_val);
+		if (ret != 1 || opt_val < 0) {
+			return -EINVAL;
+		}
+		
+		opt->switch_timer = opt_val;
 		return 0;
 	} else {
 		return -EINVAL;
@@ -620,6 +632,11 @@ static int lttctl_channel_setup(struct channel_option *opt)
 		if ((ret = lttctl_set_channel_subbuf_size(opt_tracename,
 							  opt->chan_name,
 							  opt->bufsize)) != 0)
+			return ret;
+	}
+	if (opt->switch_timer != -1) {
+		if ((ret = lttctl_set_channel_switch_timer(opt_tracename,
+				opt->chan_name, opt->switch_timer)) != 0)
 			return ret;
 	}
 
