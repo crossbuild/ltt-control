@@ -443,6 +443,7 @@ static int __lttctl_set_channel_enable(const char *name, const char *channel,
 
 	return ret;
 }
+
 int lttctl_set_channel_enable(const char *name, const char *channel,
 		int enable)
 {
@@ -639,6 +640,7 @@ static int __lttctl_set_channel_subbuf_size(const char *name,
 	ret = lttctl_sendop(ctlfname, opstr);
 	if (ret)
 		fprintf(stderr, "Set channel's subbuf size failed\n");
+	return ret;
 }
 
 int lttctl_set_channel_subbuf_size(const char *name, const char *channel,
@@ -706,6 +708,7 @@ static int __lttctl_set_channel_switch_timer(const char *name,
 	ret = lttctl_sendop(ctlfname, opstr);
 	if (ret)
 		fprintf(stderr, "Set channel's switch timer failed\n");
+	return ret;
 }
 
 int lttctl_set_channel_switch_timer(const char *name, const char *channel,
