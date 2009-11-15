@@ -320,15 +320,26 @@ int open_buffer_file(char *filename, char *path_channel, char *path_trace,
 						S_IRWXU|S_IRWXG|S_IRWXO);
 			if(fd_pairs->pair[fd_pairs->num_pairs-1].trace == -1) {
 				perror(path_trace);
+				open_ret = -1;
+				close(fd_pairs->pair[fd_pairs->num_pairs-1].channel);
+				fd_pairs->num_pairs--;
+				goto end;
 			}
 			ret = lseek(fd_pairs->pair[fd_pairs->num_pairs-1].trace,
 				    0, SEEK_END);
 			if (ret < 0) {
 				perror(path_trace);
+				open_ret = -1;
+				close(fd_pairs->pair[fd_pairs->num_pairs-1].channel);
+				close(fd_pairs->pair[fd_pairs->num_pairs-1].trace);
+				fd_pairs->num_pairs--;
+				goto end;
 			}
 		} else {
 			printf("File %s exists, cannot open. Try append mode.\n", path_trace);
 			open_ret = -1;
+			close(fd_pairs->pair[fd_pairs->num_pairs-1].channel);
+			fd_pairs->num_pairs--;
 			goto end;
 		}
 	} else {
@@ -338,6 +349,10 @@ int open_buffer_file(char *filename, char *path_channel, char *path_trace,
 						S_IRWXU|S_IRWXG|S_IRWXO);
 			if(fd_pairs->pair[fd_pairs->num_pairs-1].trace == -1) {
 				perror(path_trace);
+				open_ret = -1;
+				close(fd_pairs->pair[fd_pairs->num_pairs-1].channel);
+				fd_pairs->num_pairs--;
+				goto end;
 			}
 		}
 	}
