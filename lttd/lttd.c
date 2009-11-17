@@ -42,13 +42,16 @@
 #include <asm/types.h>
 
 /* Get the next sub buffer that can be read. */
-#define RELAY_GET_SUBBUF        _IOR(0xF5, 0x00,__u32)
+#define RELAY_GET_SB		_IOR(0xF5, 0x00,__u32)
 /* Release the oldest reserved (by "get") sub buffer. */
-#define RELAY_PUT_SUBBUF        _IOW(0xF5, 0x01,__u32)
+#define RELAY_PUT_SB		_IOW(0xF5, 0x01,__u32)
 /* returns the number of sub buffers in the per cpu channel. */
-#define RELAY_GET_N_SUBBUFS     _IOR(0xF5, 0x02,__u32)
-/* returns the size of the sub buffers. */
-#define RELAY_GET_SUBBUF_SIZE   _IOR(0xF5, 0x03,__u32)
+#define RELAY_GET_N_SB		_IOR(0xF5, 0x02,__u32)
+/* returns the size of the current sub buffer. */
+#define RELAY_GET_SB_SIZE	_IOR(0xF5, 0x03, __u32)
+/* returns the size of data to consume in the current sub-buffer. */
+#define RELAY_GET_MAX_SB_SIZE	_IOR(0xF5, 0x04, __u32)
+
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,14)
 #include <sys/inotify.h>
@@ -88,18 +91,11 @@ static inline int inotify_rm_watch (int fd, __u32 wd)
 #undef HAS_INOTIFY
 #endif
 
-enum {
-	GET_SUBBUF,
-	PUT_SUBBUF,
-	GET_N_BUBBUFS,
-	GET_SUBBUF_SIZE
-};
-
 struct fd_pair {
 	int channel;
 	int trace;
-	unsigned int n_subbufs;
-	unsigned int subbuf_size;
+	unsigned int n_sb;
+	unsigned int max_sb_size;
 	void *mmap;
 	pthread_mutex_t	mutex;
 };
@@ -455,14 +451,13 @@ end:
 
 int read_subbuffer(struct fd_pair *pair)
 {
-	unsigned int consumed_old;
+	unsigned int consumed_old, len;
 	int err;
 	long ret;
-	unsigned long len;
 	off_t offset;
 
 
-	err = ioctl(pair->channel, RELAY_GET_SUBBUF, &consumed_old);
+	err = ioctl(pair->channel, RELAY_GET_SB, &consumed_old);
 	printf_verbose("cookie : %u\n", consumed_old);
 	if(err != 0) {
 		ret = errno;
@@ -481,7 +476,13 @@ int read_subbuffer(struct fd_pair *pair)
 		goto write_error;
 	}
 #endif //0
-	len = pair->subbuf_size;
+	err = ioctl(pair->channel, RELAY_GET_SB_SIZE, &len);
+	if(err != 0) {
+		ret = errno;
+		perror("Getting sub-buffer len failed.");
+		goto get_error;
+	}
+
 	offset = 0;
 	while (len > 0) {
 		printf_verbose("splice chan to pipe offset %lu\n",
@@ -513,14 +514,14 @@ int read_subbuffer(struct fd_pair *pair)
 #endif //0
 write_error:
 	ret = 0;
-	err = ioctl(pair->channel, RELAY_PUT_SUBBUF, &consumed_old);
+	err = ioctl(pair->channel, RELAY_PUT_SB, &consumed_old);
 	if(err != 0) {
 		ret = errno;
 		if(errno == EFAULT) {
 			perror("Error in unreserving sub buffer\n");
 		} else if(errno == EIO) {
-			perror("Reader has been pushed by the writer, last subbuffer corrupted.");
-			/* FIXME : we may delete the last written buffer if we wish. */
+			/* Should never happen with newer LTTng versions */
+			perror("Reader has been pushed by the writer, last sub-buffer corrupted.");
 		}
 		goto get_error;
 	}
@@ -546,16 +547,15 @@ int map_channels(struct channel_trace_fd *fd_pairs,
 	for(i=idx_begin;i<idx_end;i++) {
 		struct fd_pair *pair = &fd_pairs->pair[i];
 
-		ret = ioctl(pair->channel, RELAY_GET_N_SUBBUFS, 
-							&pair->n_subbufs);
+		ret = ioctl(pair->channel, RELAY_GET_N_SB, &pair->n_sb);
 		if(ret != 0) {
-			perror("Error in getting the number of subbuffers");
+			perror("Error in getting the number of sub-buffers");
 			goto end;
 		}
-		ret = ioctl(pair->channel, RELAY_GET_SUBBUF_SIZE, 
-							&pair->subbuf_size);
+		ret = ioctl(pair->channel, RELAY_GET_MAX_SB_SIZE, 
+			    &pair->max_sb_size);
 		if(ret != 0) {
-			perror("Error in getting the size of the subbuffers");
+			perror("Error in getting the max sub-buffer size");
 			goto end;
 		}
 		ret = pthread_mutex_init(&pair->mutex, NULL);	/* Fast mutex */
@@ -824,7 +824,7 @@ int read_channels(unsigned long thread_num, struct channel_trace_fd *fd_pairs,
 							pollfd[i].fd);
 						/* Take care of high priority channels first. */
 						high_prio = 1;
-						/* it's ok to have an unavailable subbuffer */
+						/* it's ok to have an unavailable sub-buffer */
 						ret = read_subbuffer(&fd_pairs->pair[i-inotify_fds]);
 						if(ret == EAGAIN) ret = 0;
 
