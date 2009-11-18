@@ -4,11 +4,9 @@ AM_CFLAGS = -DPACKAGE_DATA_DIR=\""$(datadir)"\" -DPACKAGE_BIN_DIR=\""$(bindir)"\
 
 bin_PROGRAMS = lttctl
 bin_SCRIPTS = ltt-armall ltt-disarmall \
-  ltt-armnetsync ltt-disarmnetsync \
   ltt-armtap ltt-disarmtap
 CLEANFILES = $(bin_SCRIPTS)
 EXTRA_DIST = ltt-armall.sh ltt-disarmall.sh \
-  ltt-armnetsync.sh ltt-disarmnetsync.sh \
   ltt-armtap.sh ltt-disarmtap.sh
 
 ltt-armall: ltt-armall.sh
@@ -22,18 +20,6 @@ ltt-disarmall: ltt-disarmall.sh
 	echo "#!"$(BASH) > ltt-disarmall
 	cat $(srcdir)/ltt-disarmall.sh >> ltt-disarmall
 	chmod ugo+x ltt-disarmall
-
-ltt-armnetsync: ltt-armnetsync.sh
-	rm -f ltt-armnetsync
-	echo "#!"$(BASH) > ltt-armnetsync
-	cat $(srcdir)/ltt-armnetsync.sh >> ltt-armnetsync
-	chmod ugo+x ltt-armnetsync
-
-ltt-disarmnetsync: ltt-disarmnetsync.sh
-	rm -f ltt-disarmnetsync
-	echo "#!"$(BASH) > ltt-disarmnetsync
-	cat $(srcdir)/ltt-disarmnetsync.sh >> ltt-disarmnetsync
-	chmod ugo+x ltt-disarmnetsync
 
 ltt-armtap: ltt-armtap.sh
 	rm -f ltt-armtap
