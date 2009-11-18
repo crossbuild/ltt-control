@@ -1,4 +1,3 @@
-#!/bin/bash
 # Copyright (C) 2009 Benjamin Poirier
 
 # This program is free software; you can redistribute it and/or modify
@@ -31,18 +30,18 @@ usage () {
 	echo "" > /dev/stderr
 }
 
-if [ ! "$DEBUGFSROOT" ]; then
+if [ ! "${DEBUGFSROOT}" ]; then
 	echo "Error: debugfs not mounted" > /dev/stderr
 	exit 1;
 fi
 
-if [ ! -d "$MARKERSROOT" ]; then
+if [ ! -d "${MARKERSROOT}" ]; then
 	echo "Error: LTT trace controller not found (did you compile and load LTTng?)" > /dev/stderr
 	exit 1;
 fi
 
 while getopts "lnqh" options; do
-	case $options in
+	case ${options} in
 		l) LOCKING="0";;
 		n) NETWORK="0";;
 		q) QUIET="0";;
@@ -52,20 +51,20 @@ while getopts "lnqh" options; do
 			exit 1;;
 	esac
 done
-shift $(($OPTIND - 1))
+shift $((${OPTIND} - 1))
 
 
-if [ ! $LOCKING ]; then
+if [ ! ${LOCKING} ]; then
 	TESTS="${TESTS} -name lockdep -prune -o -name locking -prune -o"
 fi
 
-if [ ! $NETWORK ]; then
+if [ ! ${NETWORK} ]; then
 	TESTS="${TESTS} -path '*/net/*_extended' -prune -o"
 fi
 
 while read -r -d $'\0' marker; do
-	if [ ! $QUIET ]; then
+	if [ ! ${QUIET} ]; then
 		echo "Connecting ${marker%/enable}"
 	fi
-	echo 1 > $marker
-done < <(eval "find '$MARKERSROOT' $TESTS -name metadata -prune -o -name enable -print0")
+	echo 1 > ${marker}
+done < <(eval "find '${MARKERSROOT}' ${TESTS} -name metadata -prune -o -name enable -print0")

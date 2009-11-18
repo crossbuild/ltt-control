@@ -1,4 +1,3 @@
-#!/bin/bash
 # Copyright (C) 2009 Benjamin Poirier
 
 # This program is free software; you can redistribute it and/or modify
@@ -28,18 +27,18 @@ usage () {
 	echo "" > /dev/stderr
 }
 
-if [ ! "$DEBUGFSROOT" ]; then
+if [ ! "${DEBUGFSROOT}" ]; then
 	echo "Error: debugfs not mounted" > /dev/stderr
 	exit 1;
 fi
 
-if [ ! -d "$MARKERSROOT" ]; then
+if [ ! -d "${MARKERSROOT}" ]; then
 	echo "Error: LTT trace controller not found (did you compile and load LTTng?)" > /dev/stderr
 	exit 1;
 fi
 
 while getopts "qh" options; do
-	case $options in
+	case ${options} in
 		q) QUIET="0";;
 		h) usage;
 			exit 0;;
@@ -47,15 +46,15 @@ while getopts "qh" options; do
 			exit 1;;
 	esac
 done
-shift $(($OPTIND - 1))
+shift $((${OPTIND} - 1))
 
 while read -r -d $'\0' marker; do
-	grep "^1$" "$marker" -q
+	grep "^1$" "${marker}" -q
 	if [ $? -ne 0 ]; then
 		continue
 	fi
-	if [ ! $QUIET ]; then
+	if [ ! ${QUIET} ]; then
 		echo "Disconnecting ${marker%/enable}"
 	fi
-	echo 0 > $marker
-done < <(eval "find '$MARKERSROOT' -name metadata -prune -o -name enable -print0")
+	echo 0 > ${marker}
+done < <(eval "find '${MARKERSROOT}' -name metadata -prune -o -name enable -print0")
