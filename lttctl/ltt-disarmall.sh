@@ -48,7 +48,7 @@ while getopts "qh" options; do
 done
 shift $((${OPTIND} - 1))
 
-(eval "find '${MARKERSROOT}' -name metadata -prune -o -name enable -print0") | while read -r -d $'\0' marker; do
+(eval "find '${MARKERSROOT}' -name metadata -prune -o -name enable -print") | while read -r marker; do
 	grep "^1$" "${marker}" -q
 	if [ $? -ne 0 ]; then
 		continue

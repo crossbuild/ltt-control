@@ -62,7 +62,7 @@ if [ ! ${NETWORK} ]; then
 	TESTS="${TESTS} -path '*/net/*_extended' -prune -o"
 fi
 
-(eval "find '${MARKERSROOT}' ${TESTS} -name metadata -prune -o -name enable -print0") | while read -r -d $'\0' marker; do
+(eval "find '${MARKERSROOT}' ${TESTS} -name metadata -prune -o -name enable -print") | while read -r marker; do
 	if [ ! ${QUIET} ]; then
 		echo "Connecting ${marker%/enable}"
 	fi
