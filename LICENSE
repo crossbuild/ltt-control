@@ -1,0 +1,13 @@
+LTTng control package licensing
+Mathieu Desnoyers
+March 2, 2010
+
+* LGPLv2.1
+
+All libraries (liblttctl only at the moment) are LGPLv2.1. The library headers
+are distributed under LGPLv2.1, but can be included in non-GPL code to allow
+linking with the library.
+
+* GPLv2
+
+Covers all shell scripts and programs.

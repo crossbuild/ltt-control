@@ -2,14 +2,26 @@
  *
  * Linux Trace Toolkit Control
  *
- * Small program that controls LTT through libltt.
- *
- * Copyright 2005 -
- * 	Mathieu Desnoyers <mathieu.desnoyers@polymtl.ca>
+ * Small program that controls LTTng through liblttctl.
  *
  * Copyright 2008 FUJITSU
  * 	Zhao Lei <zhaolei@cn.fujitsu.com>
  * 	Gui Jianfeng <guijianfeng@cn.fujitsu.com>
+ * Copyright 2009-2010 - Mathieu Desnoyers <mathieu.desnoyers@efficios.com>
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along
+ * with this program; if not, write to the Free Software Foundation, Inc.,
+ * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
 #ifdef HAVE_CONFIG_H

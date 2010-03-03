@@ -1,23 +1,29 @@
-/* libltt header file
+/*
+ * lttctl.h
  *
- * Copyright 2005-
- *		 Mathieu Desnoyers <mathieu.desnoyers@polymtl.ca>
+ * Linux Trace Toolkit Control Library Header File
  *
+ * Controls the ltt-control kernel module through debugfs.
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
+ * Copyright (c) 2005-2010 Mathieu Desnoyers <mathieu.desnoyers@efficios.com>
  *
- * This program is distributed in the hope that it will be useful,
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.	See the
- * GNU General Public License for more details.
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
  *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this library; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#ifndef _LIBLTT_H
-#define _LIBLTT_H
+#ifndef _LTTCTL_H
+#define _LTTCTL_H
 
 int lttctl_init(void);
 int lttctl_destroy(void);
@@ -41,4 +47,4 @@ int lttctl_set_channel_switch_timer(const char *name, const char *channel,
 /* Helper functions */
 int getdebugfsmntdir(char *mntdir);
 
-#endif /*_LIBLTT_H */
+#endif /*_LTTCTL_H */
