@@ -156,6 +156,11 @@ static void show_arguments(void)
 	printf("        Set channels root path, For -w option."
 		" (ex. /mnt/debugfs/ltt)\n");
 	printf("\n");
+	printf(" Environment variables:\n");
+	printf("  LTT_DAEMON\n");
+	printf("       Complete path to the lttd binary (needs to be\n");
+	printf("       specified if different than package build prefix).\n");
+	printf("\n");
 }
 
 /*
