@@ -24,6 +24,7 @@ usage () {
 	echo "Options:" > /dev/stderr
 	printf "\t-l           Also activate locking markers (high traffic)\n" > /dev/stderr
 	printf "\t-n           Also activate detailed network markers (large size)\n" > /dev/stderr
+	printf "\t-i           Also activate input subsystem events (security implication: records keyboard inputs)\n" > /dev/stderr
 	echo "" > /dev/stderr
 	printf "\t-q           Quiet mode, suppress output\n" > /dev/stderr
 	printf "\t-h           Print this help\n" > /dev/stderr
@@ -45,6 +46,7 @@ while getopts "lnqh" options; do
 		l) LOCKING="0";;
 		n) NETWORK="0";;
 		q) QUIET="0";;
+		i) INPUT="0";;
 		h) usage;
 			exit 0;;
 		\?) usage;
@@ -60,6 +62,10 @@ fi
 
 if [ ! ${NETWORK} ]; then
 	TESTS="${TESTS} -path '*/net/*_extended' -prune -o"
+fi
+
+if [ ! ${INPUT} ]; then
+	TESTS="${TESTS} -name input -prune -o"
 fi
 
 (eval "find '${MARKERSROOT}' ${TESTS} -name metadata -prune -o -name enable -print") | while read -r marker; do
