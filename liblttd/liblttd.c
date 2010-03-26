@@ -75,8 +75,6 @@ static inline int inotify_rm_watch (int fd, __u32 wd)
 #undef HAS_INOTIFY
 #endif
 
-struct liblttd_callbacks *callbacks;
-
 struct channel_trace_fd {
 	struct fd_pair *pair;
 	int num_pairs;
@@ -93,41 +91,50 @@ struct inotify_watch_array {
 	int num;
 };
 
-struct channel_trace_fd fd_pairs = { NULL, 0 };
-int inotify_fd = -1;
-struct inotify_watch_array inotify_watch_array = { NULL, 0 };
+struct liblttd_instance {
+	struct liblttd_callbacks *callbacks;
 
-/* protects fd_pairs and inotify_watch_array */
-pthread_rwlock_t fd_pairs_lock = PTHREAD_RWLOCK_INITIALIZER;
+	int inotify_fd;
+	struct channel_trace_fd fd_pairs;
+	struct inotify_watch_array inotify_watch_array;
 
-static char		*channel_name = NULL;
-static unsigned long	num_threads = 1;
-volatile static int	quit_program = 0;	/* For signal handler */
-static int		dump_flight_only = 0;
-static int		dump_normal_only = 0;
-static int		verbose_mode = 0;
+	/* protects fd_pairs and inotify_watch_array */
+	pthread_rwlock_t fd_pairs_lock;
+
+	char		channel_name[PATH_MAX];
+	unsigned long	num_threads;
+	int		quit_program;	/* For signal handler */
+	int		dump_flight_only;
+	int		dump_normal_only;
+	int		verbose_mode;
+};
+
+struct liblttd_thread_data {
+	int thread_num;
+	struct liblttd_instance *instance;
+};
 
 #define printf_verbose(fmt, args...) \
   do {                               \
-    if (verbose_mode)                \
+    if (instance->verbose_mode)      \
       printf(fmt, ##args);           \
   } while (0)
 
 
-int open_buffer_file(char *filename, char *path_channel,
-	char *base_path_channel, struct channel_trace_fd *fd_pairs)
+int open_buffer_file(struct liblttd_instance *instance, char *filename,
+	char *path_channel, char *base_path_channel)
 {
 	int open_ret = 0;
 	int ret = 0;
 
 	if(strncmp(filename, "flight-", sizeof("flight-")-1) != 0) {
-		if(dump_flight_only) {
+		if(instance->dump_flight_only) {
 			printf_verbose("Skipping normal channel %s\n",
 				path_channel);
 			return 0;
 		}
 	} else {
-		if(dump_normal_only) {
+		if(instance->dump_normal_only) {
 			printf_verbose("Skipping flight channel %s\n",
 				path_channel);
 			return 0;
@@ -135,26 +142,26 @@ int open_buffer_file(char *filename, char *path_channel,
 	}
 	printf_verbose("Opening file.\n");
 
-	fd_pairs->pair = realloc(fd_pairs->pair,
-			++fd_pairs->num_pairs * sizeof(struct fd_pair));
+	instance->fd_pairs.pair = realloc(instance->fd_pairs.pair,
+			++instance->fd_pairs.num_pairs * sizeof(struct fd_pair));
 
 	/* Open the channel in read mode */
-	fd_pairs->pair[fd_pairs->num_pairs-1].channel =
+	instance->fd_pairs.pair[instance->fd_pairs.num_pairs-1].channel =
 		open(path_channel, O_RDONLY | O_NONBLOCK);
-	if(fd_pairs->pair[fd_pairs->num_pairs-1].channel == -1) {
+	if(instance->fd_pairs.pair[instance->fd_pairs.num_pairs-1].channel == -1) {
 		perror(path_channel);
-		fd_pairs->num_pairs--;
+		instance->fd_pairs.num_pairs--;
 		return 0;	/* continue */
 	}
 
-	if(callbacks->on_open_channel) ret = callbacks->on_open_channel(
-			callbacks, &fd_pairs->pair[fd_pairs->num_pairs-1],
+	if(instance->callbacks->on_open_channel) ret = instance->callbacks->on_open_channel(
+			instance->callbacks, &instance->fd_pairs.pair[instance->fd_pairs.num_pairs-1],
 			base_path_channel);
 
 	if(ret != 0) {
 		open_ret = -1;
-		close(fd_pairs->pair[fd_pairs->num_pairs-1].channel);
-		fd_pairs->num_pairs--;
+		close(instance->fd_pairs.pair[instance->fd_pairs.num_pairs-1].channel);
+		instance->fd_pairs.num_pairs--;
 		goto end;
 	}
 
@@ -162,10 +169,8 @@ end:
 	return open_ret;
 }
 
-int open_channel_trace_pairs(char *subchannel_name,
-		char *base_subchannel_name,
-		struct channel_trace_fd *fd_pairs, int *inotify_fd,
-		struct inotify_watch_array *iwatch_array)
+int open_channel_trace_pairs(struct liblttd_instance *instance,
+	char *subchannel_name, char *base_subchannel_name)
 {
 	DIR *channel_dir = opendir(subchannel_name);
 	struct dirent *entry;
@@ -184,9 +189,9 @@ int open_channel_trace_pairs(char *subchannel_name,
 		goto end;
 	}
 
-	printf_verbose("Calling on new channels folder");
-	if(callbacks->on_new_channels_folder) ret = callbacks->
-			on_new_channels_folder(callbacks,
+	printf_verbose("Calling on new channels folder\n");
+	if(instance->callbacks->on_new_channels_folder) ret = instance->callbacks->
+			on_new_channels_folder(instance->callbacks,
 			base_subchannel_name);
 	if(ret == -1) {
 		open_ret = -1;
@@ -202,18 +207,18 @@ int open_channel_trace_pairs(char *subchannel_name,
 		(base_subchannel_name - subchannel_name);
 
 #ifdef HAS_INOTIFY
-	iwatch_array->elem = realloc(iwatch_array->elem,
-		++iwatch_array->num * sizeof(struct inotify_watch));
+	instance->inotify_watch_array.elem = realloc(instance->inotify_watch_array.elem,
+		++instance->inotify_watch_array.num * sizeof(struct inotify_watch));
 
 	printf_verbose("Adding inotify for channel %s\n", path_channel);
-	iwatch_array->elem[iwatch_array->num-1].wd = inotify_add_watch(*inotify_fd, path_channel, IN_CREATE);
-	strcpy(iwatch_array->elem[iwatch_array->num-1].path_channel, path_channel);
-	iwatch_array->elem[iwatch_array->num-1].base_path_channel =
-		iwatch_array->elem[iwatch_array->num-1].path_channel +
+	instance->inotify_watch_array.elem[instance->inotify_watch_array.num-1].wd = inotify_add_watch(instance->inotify_fd, path_channel, IN_CREATE);
+	strcpy(instance->inotify_watch_array.elem[instance->inotify_watch_array.num-1].path_channel, path_channel);
+	instance->inotify_watch_array.elem[instance->inotify_watch_array.num-1].base_path_channel =
+		instance->inotify_watch_array.elem[instance->inotify_watch_array.num-1].path_channel +
 		(base_subchannel_name - subchannel_name);
 	printf_verbose("Added inotify for channel %s, wd %u\n",
-		iwatch_array->elem[iwatch_array->num-1].path_channel,
-		iwatch_array->elem[iwatch_array->num-1].wd);
+		instance->inotify_watch_array.elem[instance->inotify_watch_array.num-1].path_channel,
+		instance->inotify_watch_array.elem[instance->inotify_watch_array.num-1].wd);
 #endif
 
 	while((entry = readdir(channel_dir)) != NULL) {
@@ -233,12 +238,11 @@ int open_channel_trace_pairs(char *subchannel_name,
 		if(S_ISDIR(stat_buf.st_mode)) {
 
 			printf_verbose("Entering channel subdirectory...\n");
-			ret = open_channel_trace_pairs(path_channel, base_subchannel_ptr, fd_pairs,
-				inotify_fd, iwatch_array);
+			ret = open_channel_trace_pairs(instance, path_channel, base_subchannel_ptr);
 			if(ret < 0) continue;
 		} else if(S_ISREG(stat_buf.st_mode)) {
-			open_ret = open_buffer_file(entry->d_name, path_channel, base_subchannel_ptr,
-				fd_pairs);
+			open_ret = open_buffer_file(instance, entry->d_name,
+				path_channel, base_subchannel_ptr);
 			if(open_ret)
 				goto end;
 		}
@@ -251,7 +255,7 @@ end:
 }
 
 
-int read_subbuffer(struct fd_pair *pair)
+int read_subbuffer(struct liblttd_instance *instance, struct fd_pair *pair)
 {
 	unsigned int consumed_old, len;
 	int err;
@@ -274,8 +278,8 @@ int read_subbuffer(struct fd_pair *pair)
 		goto get_error;
 	}
 
-	if(callbacks->on_read_subbuffer) ret = callbacks->on_read_subbuffer(
-		callbacks, pair, len);
+	if(instance->callbacks->on_read_subbuffer) ret = instance->callbacks->on_read_subbuffer(
+		instance->callbacks, pair, len);
 
 write_error:
 	ret = 0;
@@ -296,13 +300,12 @@ get_error:
 }
 
 
-int map_channels(struct channel_trace_fd *fd_pairs,
-	int idx_begin, int idx_end)
+int map_channels(struct liblttd_instance *instance, int idx_begin, int idx_end)
 {
 	int i,j;
 	int ret=0;
 
-	if(fd_pairs->num_pairs <= 0) {
+	if(instance->fd_pairs.num_pairs <= 0) {
 		printf("No channel to read\n");
 		goto end;
 	}
@@ -310,7 +313,7 @@ int map_channels(struct channel_trace_fd *fd_pairs,
 	/* Get the subbuf sizes and number */
 
 	for(i=idx_begin;i<idx_end;i++) {
-		struct fd_pair *pair = &fd_pairs->pair[i];
+		struct fd_pair *pair = &instance->fd_pairs.pair[i];
 
 		ret = ioctl(pair->channel, RELAY_GET_N_SB, &pair->n_sb);
 		if(ret != 0) {
@@ -334,14 +337,14 @@ end:
 	return ret;
 }
 
-int unmap_channels(struct channel_trace_fd *fd_pairs)
+int unmap_channels(struct liblttd_instance *instance)
 {
 	int j;
 	int ret=0;
 
 	/* Munmap each FD */
-	for(j=0;j<fd_pairs->num_pairs;j++) {
-		struct fd_pair *pair = &fd_pairs->pair[j];
+	for(j=0;j<instance->fd_pairs.num_pairs;j++) {
+		struct fd_pair *pair = &instance->fd_pairs.pair[j];
 		int err_ret;
 
 		err_ret = pthread_mutex_destroy(&pair->mutex);
@@ -359,10 +362,7 @@ int unmap_channels(struct channel_trace_fd *fd_pairs)
  *
  * Only support add file for now.
  */
-
-int read_inotify(int inotify_fd,
-	struct channel_trace_fd *fd_pairs,
-	struct inotify_watch_array *iwatch_array)
+int read_inotify(struct liblttd_instance *instance)
 {
 	char buf[sizeof(struct inotify_event) + PATH_MAX];
 	char path_channel[PATH_MAX];
@@ -374,7 +374,7 @@ int read_inotify(int inotify_fd,
 	int old_num;
 
 	offset = 0;
-	len = read(inotify_fd, buf, sizeof(struct inotify_event) + PATH_MAX);
+	len = read(instance->inotify_fd, buf, sizeof(struct inotify_event) + PATH_MAX);
 	if(len < 0) {
 
 		if(errno == EAGAIN)
@@ -385,24 +385,24 @@ int read_inotify(int inotify_fd,
 	}
 	while(offset < len) {
 		ievent = (struct inotify_event *)&(buf[offset]);
-		for(i=0; i<iwatch_array->num; i++) {
-			if(iwatch_array->elem[i].wd == ievent->wd &&
+		for(i=0; i<instance->inotify_watch_array.num; i++) {
+			if(instance->inotify_watch_array.elem[i].wd == ievent->wd &&
 				ievent->mask == IN_CREATE) {
 				printf_verbose(
 					"inotify wd %u event mask : %u for %s%s\n",
 					ievent->wd, ievent->mask,
-					iwatch_array->elem[i].path_channel,
+					instance->inotify_watch_array.elem[i].path_channel,
 					ievent->name);
-				old_num = fd_pairs->num_pairs;
-				strcpy(path_channel, iwatch_array->elem[i].path_channel);
+				old_num = instance->fd_pairs.num_pairs;
+				strcpy(path_channel, instance->inotify_watch_array.elem[i].path_channel);
 				strcat(path_channel, ievent->name);
-				if(ret = open_buffer_file(ievent->name, path_channel,
-					path_channel + (iwatch_array->elem[i].base_path_channel -
-					iwatch_array->elem[i].path_channel), fd_pairs)) {
+				if(ret = open_buffer_file(instance, ievent->name, path_channel,
+					path_channel + (instance->inotify_watch_array.elem[i].base_path_channel -
+					instance->inotify_watch_array.elem[i].path_channel))) {
 					printf("Error opening buffer file\n");
 					return -1;
 				}
-				if(ret = map_channels(fd_pairs, old_num, fd_pairs->num_pairs)) {
+				if(ret = map_channels(instance, old_num, instance->fd_pairs.num_pairs)) {
 					printf("Error mapping channel\n");
 					return -1;
 				}
@@ -432,8 +432,7 @@ int read_inotify(int inotify_fd,
  * full.
  */
 
-int read_channels(unsigned long thread_num, struct channel_trace_fd *fd_pairs,
-	int inotify_fd, struct inotify_watch_array *iwatch_array)
+int read_channels(struct liblttd_instance *instance, unsigned long thread_num)
 {
 	struct pollfd *pollfd = NULL;
 	int num_pollfd;
@@ -450,24 +449,24 @@ int read_channels(unsigned long thread_num, struct channel_trace_fd *fd_pairs,
 	inotify_fds = 0;
 #endif
 
-	pthread_rwlock_rdlock(&fd_pairs_lock);
+	pthread_rwlock_rdlock(&instance->fd_pairs_lock);
 
 	/* Start polling the FD. Keep one fd for inotify */
-	pollfd = malloc((inotify_fds + fd_pairs->num_pairs) * sizeof(struct pollfd));
+	pollfd = malloc((inotify_fds + instance->fd_pairs.num_pairs) * sizeof(struct pollfd));
 
 #ifdef HAS_INOTIFY
-	pollfd[0].fd = inotify_fd;
+	pollfd[0].fd = instance->inotify_fd;
 	pollfd[0].events = POLLIN|POLLPRI;
 #endif
 
-	for(i=0;i<fd_pairs->num_pairs;i++) {
-		pollfd[inotify_fds+i].fd = fd_pairs->pair[i].channel;
+	for(i=0;i<instance->fd_pairs.num_pairs;i++) {
+		pollfd[inotify_fds+i].fd = instance->fd_pairs.pair[i].channel;
 		pollfd[inotify_fds+i].events = POLLIN|POLLPRI;
 	}
-	num_pollfd = inotify_fds + fd_pairs->num_pairs;
+	num_pollfd = inotify_fds + instance->fd_pairs.num_pairs;
 
 
-	pthread_rwlock_unlock(&fd_pairs_lock);
+	pthread_rwlock_unlock(&instance->fd_pairs_lock);
 
 	while(1) {
 		high_prio = 0;
@@ -480,7 +479,7 @@ int read_channels(unsigned long thread_num, struct channel_trace_fd *fd_pairs,
 #endif //DEBUG
 
 		/* Have we received a signal ? */
-		if(quit_program) break;
+		if(instance->quit_program) break;
 
 		num_rdy = poll(pollfd, num_pollfd, -1);
 
@@ -513,9 +512,9 @@ int read_channels(unsigned long thread_num, struct channel_trace_fd *fd_pairs,
 					"Polling inotify fd %d : data ready.\n",
 					pollfd[0].fd);
 
-				pthread_rwlock_wrlock(&fd_pairs_lock);
-				read_inotify(inotify_fd, fd_pairs, iwatch_array);
-				pthread_rwlock_unlock(&fd_pairs_lock);
+				pthread_rwlock_wrlock(&instance->fd_pairs_lock);
+				read_inotify(instance);
+				pthread_rwlock_unlock(&instance->fd_pairs_lock);
 
 			break;
 		}
@@ -542,22 +541,22 @@ int read_channels(unsigned long thread_num, struct channel_trace_fd *fd_pairs,
 					num_hup++;
 					break;
 				case POLLPRI:
-					pthread_rwlock_rdlock(&fd_pairs_lock);
-					if(pthread_mutex_trylock(&fd_pairs->pair[i-inotify_fds].mutex) == 0) {
+					pthread_rwlock_rdlock(&instance->fd_pairs_lock);
+					if(pthread_mutex_trylock(&instance->fd_pairs.pair[i-inotify_fds].mutex) == 0) {
 						printf_verbose(
 							"Urgent read on fd %d\n",
 							pollfd[i].fd);
 						/* Take care of high priority channels first. */
 						high_prio = 1;
 						/* it's ok to have an unavailable sub-buffer */
-						ret = read_subbuffer(&fd_pairs->pair[i-inotify_fds]);
+						ret = read_subbuffer(instance, &instance->fd_pairs.pair[i-inotify_fds]);
 						if(ret == EAGAIN) ret = 0;
 
-						ret = pthread_mutex_unlock(&fd_pairs->pair[i-inotify_fds].mutex);
+						ret = pthread_mutex_unlock(&instance->fd_pairs.pair[i-inotify_fds].mutex);
 						if(ret)
 							printf("Error in mutex unlock : %s\n", strerror(ret));
 					}
-					pthread_rwlock_unlock(&fd_pairs_lock);
+					pthread_rwlock_unlock(&instance->fd_pairs_lock);
 					break;
 			}
 		}
@@ -568,38 +567,38 @@ int read_channels(unsigned long thread_num, struct channel_trace_fd *fd_pairs,
 			for(i=inotify_fds;i<num_pollfd;i++) {
 				switch(pollfd[i].revents) {
 					case POLLIN:
-						pthread_rwlock_rdlock(&fd_pairs_lock);
-						if(pthread_mutex_trylock(&fd_pairs->pair[i-inotify_fds].mutex) == 0) {
+						pthread_rwlock_rdlock(&instance->fd_pairs_lock);
+						if(pthread_mutex_trylock(&instance->fd_pairs.pair[i-inotify_fds].mutex) == 0) {
 							/* Take care of low priority channels. */
 							printf_verbose(
 								"Normal read on fd %d\n",
 								pollfd[i].fd);
 							/* it's ok to have an unavailable subbuffer */
-							ret = read_subbuffer(&fd_pairs->pair[i-inotify_fds]);
+							ret = read_subbuffer(instance, &instance->fd_pairs.pair[i-inotify_fds]);
 							if(ret == EAGAIN) ret = 0;
 
-							ret = pthread_mutex_unlock(&fd_pairs->pair[i-inotify_fds].mutex);
+							ret = pthread_mutex_unlock(&instance->fd_pairs.pair[i-inotify_fds].mutex);
 							if(ret)
 								printf("Error in mutex unlock : %s\n", strerror(ret));
 						}
-						pthread_rwlock_unlock(&fd_pairs_lock);
+						pthread_rwlock_unlock(&instance->fd_pairs_lock);
 						break;
 				}
 			}
 		}
 
 		/* Update pollfd array if an entry was added to fd_pairs */
-		pthread_rwlock_rdlock(&fd_pairs_lock);
-		if((inotify_fds + fd_pairs->num_pairs) != num_pollfd) {
+		pthread_rwlock_rdlock(&instance->fd_pairs_lock);
+		if((inotify_fds + instance->fd_pairs.num_pairs) != num_pollfd) {
 			pollfd = realloc(pollfd,
-					(inotify_fds + fd_pairs->num_pairs) * sizeof(struct pollfd));
-			for(i=num_pollfd-inotify_fds;i<fd_pairs->num_pairs;i++) {
-				pollfd[inotify_fds+i].fd = fd_pairs->pair[i].channel;
+					(inotify_fds + instance->fd_pairs.num_pairs) * sizeof(struct pollfd));
+			for(i=num_pollfd-inotify_fds;i<instance->fd_pairs.num_pairs;i++) {
+				pollfd[inotify_fds+i].fd = instance->fd_pairs.pair[i].channel;
 				pollfd[inotify_fds+i].events = POLLIN|POLLPRI;
 			}
-			num_pollfd = fd_pairs->num_pairs + inotify_fds;
+			num_pollfd = instance->fd_pairs.num_pairs + inotify_fds;
 		}
-		pthread_rwlock_unlock(&fd_pairs_lock);
+		pthread_rwlock_unlock(&instance->fd_pairs_lock);
 
 		/* NB: If the fd_pairs structure is updated by another thread from this
 		 *     point forward, the current thread will wait in the poll without
@@ -620,104 +619,111 @@ end:
 }
 
 
-void close_channel_trace_pairs(struct channel_trace_fd *fd_pairs, int inotify_fd,
-	struct inotify_watch_array *iwatch_array)
+void close_channel_trace_pairs(struct liblttd_instance *instance)
 {
 	int i;
 	int ret;
 
-	for(i=0;i<fd_pairs->num_pairs;i++) {
-		ret = close(fd_pairs->pair[i].channel);
+	for(i=0;i<instance->fd_pairs.num_pairs;i++) {
+		ret = close(instance->fd_pairs.pair[i].channel);
 		if(ret == -1) perror("Close error on channel");
-		if(callbacks->on_close_channel) {
-			ret = callbacks->on_close_channel(
-				callbacks, &fd_pairs->pair[i]);
+		if(instance->callbacks->on_close_channel) {
+			ret = instance->callbacks->on_close_channel(
+				instance->callbacks, &instance->fd_pairs.pair[i]);
 			if(ret != 0) perror("Error on close channel callback");
 		}
 	}
-	free(fd_pairs->pair);
-	free(iwatch_array->elem);
+	free(instance->fd_pairs.pair);
+	free(instance->inotify_watch_array.elem);
 }
 
 /* Thread worker */
 void * thread_main(void *arg)
 {
 	long ret = 0;
-	unsigned long thread_num = (unsigned long)arg;
+	struct liblttd_thread_data *thread_data = (struct liblttd_thread_data*) arg;
 
-	if(callbacks->on_new_thread)
-		ret = callbacks->on_new_thread(callbacks, thread_num);
+	if(thread_data->instance->callbacks->on_new_thread)
+		ret = thread_data->instance->callbacks->on_new_thread(
+		thread_data->instance->callbacks, thread_data->thread_num);
 
 	if (ret < 0) {
 		return (void*)ret;
 	}
-	ret = read_channels(thread_num, &fd_pairs, inotify_fd, &inotify_watch_array);
+	ret = read_channels(thread_data->instance, thread_data->thread_num);
 
-	if(callbacks->on_close_thread)
-		callbacks->on_close_thread(callbacks, thread_num);
+	if(thread_data->instance->callbacks->on_close_thread)
+		thread_data->instance->callbacks->on_close_thread(
+		thread_data->instance->callbacks, thread_data->thread_num);
+
+	free(thread_data);
 
 	return (void*)ret;
 }
 
-/*on_close_thread has to be reentrant, it'll be called by many threads*/
-int(*on_close_thread)(struct liblttd_callbacks *data, unsigned long thread_num);
-
-int channels_init()
+int channels_init(struct liblttd_instance *instance)
 {
 	int ret = 0;
 
-	inotify_fd = inotify_init();
-	fcntl(inotify_fd, F_SETFL, O_NONBLOCK);
+	instance->inotify_fd = inotify_init();
+	fcntl(instance->inotify_fd, F_SETFL, O_NONBLOCK);
 
-	if(ret = open_channel_trace_pairs(channel_name,
-			channel_name + strlen(channel_name), &fd_pairs,
-			&inotify_fd, &inotify_watch_array))
+	if(ret = open_channel_trace_pairs(instance, instance->channel_name,
+			instance->channel_name +
+			strlen(instance->channel_name)))
 		goto close_channel;
-	if (fd_pairs.num_pairs == 0) {
+	if (instance->fd_pairs.num_pairs == 0) {
 		printf("No channel available for reading, exiting\n");
 		ret = -ENOENT;
 		goto close_channel;
 	}
-	if(ret = map_channels(&fd_pairs, 0, fd_pairs.num_pairs))
+
+	if(ret = map_channels(instance, 0, instance->fd_pairs.num_pairs))
 		goto close_channel;
 	return 0;
 
 close_channel:
-	close_channel_trace_pairs(&fd_pairs, inotify_fd, &inotify_watch_array);
-	if(inotify_fd >= 0)
-		close(inotify_fd);
+	close_channel_trace_pairs(instance);
+	if(instance->inotify_fd >= 0)
+		close(instance->inotify_fd);
 	return ret;
 }
 
-int liblttd_start(char *channel_path, unsigned long n_threads,
-		int flight_only, int normal_only, int verbose,
-		struct liblttd_callbacks *user_data){
+int delete_instance(struct liblttd_instance *instance)
+{
+	pthread_rwlock_destroy(&instance->fd_pairs_lock);
+	free(instance);
+	return 0;
+}
+
+int liblttd_start_instance(struct liblttd_instance *instance)
+{
 	int ret = 0;
 	pthread_t *tids;
 	unsigned long i;
 	void *tret;
 
-	channel_name = channel_path;
-	num_threads = n_threads;
-	dump_flight_only = flight_only;
-	dump_normal_only = normal_only;
-	verbose_mode = verbose;
-	callbacks = user_data;
+	if(!instance)
+		return -EINVAL;
 
-	if(ret = channels_init())
+	if(ret = channels_init(instance))
 		return ret;
 
-	tids = malloc(sizeof(pthread_t) * num_threads);
-	for(i=0; i<num_threads; i++) {
+	tids = malloc(sizeof(pthread_t) * instance->num_threads);
+	for(i=0; i<instance->num_threads; i++) {
+		struct liblttd_thread_data *thread_data =
+			malloc(sizeof(struct liblttd_thread_data));
+		thread_data->thread_num = i;
+		thread_data->instance = instance;
 
-		ret = pthread_create(&tids[i], NULL, thread_main, (void*)i);
+		ret = pthread_create(&tids[i], NULL, thread_main, thread_data);
 		if(ret) {
 			perror("Error creating thread");
 			break;
 		}
 	}
 
-	for(i=0; i<num_threads; i++) {
+	for(i=0; i<instance->num_threads; i++) {
 		ret = pthread_join(tids[i], &tret);
 		if(ret) {
 			perror("Error joining thread");
@@ -730,18 +736,55 @@ int liblttd_start(char *channel_path, unsigned long n_threads,
 	}
 
 	free(tids);
-	ret = unmap_channels(&fd_pairs);
-	close_channel_trace_pairs(&fd_pairs, inotify_fd, &inotify_watch_array);
-	if(inotify_fd >= 0)
-		close(inotify_fd);
+	ret = unmap_channels(instance);
+	close_channel_trace_pairs(instance);
+	if(instance->inotify_fd >= 0)
+		close(instance->inotify_fd);
 
-	if(callbacks->on_trace_end) callbacks->on_trace_end(callbacks);
+	if(instance->callbacks->on_trace_end)
+		instance->callbacks->on_trace_end(instance->callbacks);
+
+	delete_instance(instance);
 
 	return ret;
 }
 
-int liblttd_stop() {
-	quit_program = 1;
+struct liblttd_instance * liblttd_new_instance(
+	struct liblttd_callbacks *callbacks, char *channel_path,
+	unsigned long n_threads, int flight_only, int normal_only, int verbose)
+{
+	struct liblttd_instance * instance;
+	if(!channel_path || !callbacks) return NULL;
+	if(n_threads == 0) n_threads = 1;
+	if(flight_only && normal_only) return NULL;
+
+	instance = malloc(sizeof(struct liblttd_instance));
+	if(!instance) return NULL;
+
+	instance->callbacks = callbacks;
+
+	instance->inotify_fd = -1;
+
+	instance->fd_pairs.pair = NULL;
+	instance->fd_pairs.num_pairs = 0;
+
+	instance->inotify_watch_array.elem = NULL;
+	instance->inotify_watch_array.num = 0;
+
+	pthread_rwlock_init(&instance->fd_pairs_lock, NULL);
+
+	strncpy(instance->channel_name, channel_path, PATH_MAX -1);
+	instance->num_threads = n_threads;
+	instance->dump_flight_only = flight_only;
+	instance->dump_normal_only = normal_only;
+	instance->verbose_mode = verbose;
+
+	return instance;
+}
+
+int liblttd_stop_instance(struct liblttd_instance *instance)
+{
+	instance->quit_program = 1;
 	return 0;
 }
 

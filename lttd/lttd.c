@@ -46,6 +46,7 @@ struct lttd_channel_data {
 	int trace;
 };
 
+struct liblttd_instance *instance;
 static char		path_trace[PATH_MAX];
 static char		*end_path_trace;
 static int		path_trace_len = 0;
@@ -191,7 +192,7 @@ void show_info(void)
 static void handler(int signo)
 {
 	printf("Signal %d received : exiting cleanly\n", signo);
-	liblttd_stop();
+	liblttd_stop_instance(instance);
 }
 
 int lttd_on_open_channel(struct liblttd_callbacks *data, struct fd_pair *pair, char *relative_channel_path)
@@ -306,7 +307,8 @@ write_error:
 	return ret;
 }
 
-int on_new_thread(struct liblttd_callbacks *data, unsigned long thread_num) {
+int lttd_on_new_thread(struct liblttd_callbacks *data, unsigned long thread_num)
+{
 	int ret;
 	ret = pipe(thread_pipe);
 	if (ret < 0) {
@@ -316,7 +318,8 @@ int on_new_thread(struct liblttd_callbacks *data, unsigned long thread_num) {
 	return 0;
 }
 
-int on_close_thread(struct liblttd_callbacks *data, unsigned long thread_num) {
+int lttd_on_close_thread(struct liblttd_callbacks *data, unsigned long thread_num)
+{
 	close(thread_pipe[0]);	/* close read end */
 	close(thread_pipe[1]);	/* close write end */
 	return 0;
@@ -333,8 +336,8 @@ int main(int argc, char ** argv)
 		lttd_on_new_channels_folder,
 		lttd_on_read_subbuffer,
 		NULL,
-		on_new_thread,
-		on_close_thread,
+		lttd_on_new_thread,
+		lttd_on_close_thread,
 		NULL
 	};
 
@@ -365,13 +368,18 @@ int main(int argc, char ** argv)
 			exit(-1);
 		}
 	}
-
 	strncpy(path_trace, trace_name, PATH_MAX-1);
 	path_trace_len = strlen(path_trace);
 	end_path_trace = path_trace + path_trace_len;
 
-	liblttd_start(channel_name, num_threads, dump_flight_only, dump_normal_only,
-		verbose_mode, &callbacks);
+	instance = liblttd_new_instance(&callbacks, channel_name, num_threads,
+		dump_flight_only, dump_normal_only, verbose_mode);
+	if(!instance) {
+		perror("An error occured while creating the liblttd instance");
+		return ret;
+	}
+
+	liblttd_start_instance(instance);
 
 	return ret;
 }
