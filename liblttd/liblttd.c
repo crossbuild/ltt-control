@@ -747,6 +747,7 @@ struct liblttd_instance * liblttd_new_instance(
 	instance->dump_flight_only = flight_only;
 	instance->dump_normal_only = normal_only;
 	instance->verbose_mode = verbose;
+	instance->quit_program = 0;
 
 	return instance;
 }
