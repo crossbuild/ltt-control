@@ -1,4 +1,4 @@
-/* lttd
+/* libttd
  *
  * Linux Trace Toolkit Daemon
  *
@@ -9,6 +9,9 @@
  *
  * Copyright 2005 -
  * 	Mathieu Desnoyers <mathieu.desnoyers@polymtl.ca>
+ * Copyright 2010 -
+ *	Michael Sills-Lavoie <michael.sills-lavoie@polymtl.ca>
+ *	Oumarou Dicko <oumarou.dicko@polymtl.ca>
  */
 
 #ifdef HAVE_CONFIG_H
@@ -74,40 +77,6 @@ static inline int inotify_rm_watch (int fd, __u32 wd)
 }
 #undef HAS_INOTIFY
 #endif
-
-struct channel_trace_fd {
-	struct fd_pair *pair;
-	int num_pairs;
-};
-
-struct inotify_watch {
-	int wd;
-	char path_channel[PATH_MAX];
-	char *base_path_channel;
-};
-
-struct inotify_watch_array {
-	struct inotify_watch *elem;
-	int num;
-};
-
-struct liblttd_instance {
-	struct liblttd_callbacks *callbacks;
-
-	int inotify_fd;
-	struct channel_trace_fd fd_pairs;
-	struct inotify_watch_array inotify_watch_array;
-
-	/* protects fd_pairs and inotify_watch_array */
-	pthread_rwlock_t fd_pairs_lock;
-
-	char		channel_name[PATH_MAX];
-	unsigned long	num_threads;
-	int		quit_program;	/* For signal handler */
-	int		dump_flight_only;
-	int		dump_normal_only;
-	int		verbose_mode;
-};
 
 struct liblttd_thread_data {
 	int thread_num;
@@ -189,7 +158,7 @@ int open_channel_trace_pairs(struct liblttd_instance *instance,
 		goto end;
 	}
 
-	printf_verbose("Calling on new channels folder\n");
+	printf_verbose("Calling : on new channels folder\n");
 	if(instance->callbacks->on_new_channels_folder) ret = instance->callbacks->
 			on_new_channels_folder(instance->callbacks,
 			base_subchannel_name);
@@ -742,7 +711,7 @@ int liblttd_start_instance(struct liblttd_instance *instance)
 		close(instance->inotify_fd);
 
 	if(instance->callbacks->on_trace_end)
-		instance->callbacks->on_trace_end(instance->callbacks);
+		instance->callbacks->on_trace_end(instance);
 
 	delete_instance(instance);
 

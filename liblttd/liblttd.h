@@ -1,9 +1,10 @@
 /* liblttd header file
  *
+ * Copyright 2005 -
+ * 		 Mathieu Desnoyers <mathieu.desnoyers@polymtl.ca>
  * Copyright 2010-
  *		 Oumarou Dicko <oumarou.dicko@polymtl.ca>
  *		 Michael Sills-Lavoie <michael.sills-lavoie@polymtl.ca>
- *
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -21,6 +22,7 @@
 #define _LIBLTTD_H
 
 #include <pthread.h>
+#include <dirent.h>
 
 /**
  * struct fd_pair - Contains the data associated with the channel file
@@ -43,7 +45,46 @@ struct fd_pair {
 	void *user_data;
 };
 
-struct liblttd_instance;
+struct channel_trace_fd {
+	struct fd_pair *pair;
+	int num_pairs;
+};
+
+struct inotify_watch {
+	int wd;
+	char path_channel[PATH_MAX];
+	char *base_path_channel;
+};
+
+struct inotify_watch_array {
+	struct inotify_watch *elem;
+	int num;
+};
+
+struct liblttd_callbacks;
+
+/**
+ * struct liblttd_instance - Contains the data associated with a trace instance.
+ * The lib user can read but MUST NOT change any attributes but callbacks.
+ * @callbacks: Contains the necessary callbacks for a tracing session.
+ */
+struct liblttd_instance {
+	struct liblttd_callbacks *callbacks;
+
+	int inotify_fd;
+	struct channel_trace_fd fd_pairs;
+	struct inotify_watch_array inotify_watch_array;
+
+	/* protects fd_pairs and inotify_watch_array */
+	pthread_rwlock_t fd_pairs_lock;
+
+	char channel_name[PATH_MAX];
+	unsigned long num_threads;
+	int quit_program;
+	int dump_flight_only;
+	int dump_normal_only;
+	int verbose_mode;
+};
 
 /**
 * struct liblttd_callbacks - Contains the necessary callbacks for a tracing
@@ -116,17 +157,16 @@ struct liblttd_callbacks {
 	 * this time, all the channels have been closed and the threads have
 	 * been destroyed.
 	 *
-	 * @data: pointeur to the callbacks struct that has been passed to the
-	 * lib.
+	 * @instance: pointeur to the instance struct that has been passed to
+	 * the lib.
 	 *
 	 * Returns 0 if the callback succeeds else not 0.
 	 *
-	 * It has to be thread safe, it'll be called by many threads.
 	 * After this callback is called, no other callback will be called
 	 * again and the tracing instance will be deleted automatically by
 	 * liblttd. After this call, the user must not use the liblttd instance.
 	 */
-	int(*on_trace_end)(struct liblttd_callbacks *data);
+	int(*on_trace_end)(struct liblttd_instance *instance);
 
 	/**
 	 * on_new_thread - Is called after a new thread has been created.
