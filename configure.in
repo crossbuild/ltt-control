@@ -76,8 +76,10 @@ DEFAULT_INCLUDES="-I\$(top_srcdir) -I\$(top_builddir)"
 #AC_SUBST(CPPFLAGS)
 
 lttctlincludedir="${includedir}/liblttctl"
+liblttdincludedir="${includedir}/liblttd"
 
 AC_SUBST(lttctlincludedir)
+AC_SUBST(liblttdincludedir)
 AC_SUBST(UTIL_LIBS)
 AC_SUBST(THREAD_LIBS)
 AC_SUBST(DEFAULT_INCLUDES)
@@ -85,6 +87,7 @@ AC_SUBST(DEFAULT_INCLUDES)
 AC_CONFIG_FILES([Makefile
      liblttctl/Makefile
      lttctl/Makefile
+     liblttd/Makefile
      lttd/Makefile
      specs/Makefile])
 AC_OUTPUT

@@ -1,2 +1,2 @@
-SUBDIRS = liblttctl lttctl lttd specs
+SUBDIRS = liblttctl lttctl liblttd lttd specs
 
