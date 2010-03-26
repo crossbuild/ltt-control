@@ -1,7 +1,7 @@
 
 
 lib_LTLIBRARIES = liblttd.la
-liblttd_la_SOURCES = liblttd.c liblttdutils.c
+liblttd_la_SOURCES = liblttd.c liblttdvfs.c
 
 liblttdinclude_HEADERS = \
-	liblttd.h liblttdutils.h
+	liblttd.h liblttdvfs.h

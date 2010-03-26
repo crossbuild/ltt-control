@@ -1,9 +1,10 @@
-/* lttd
+/*
+ * lttd
  *
  * Linux Trace Toolkit Daemon
  *
- * This is a simple daemon that reads a few relay+debugfs channels and save
- * them in a trace.
+ * This is a simple daemon that reads a few LTTng debugfs channels and saves
+ * them in a trace on the virtual file system.
  *
  * CPU hot-plugging is supported using inotify.
  *
@@ -24,7 +25,6 @@
  * You should have received a copy of the GNU General Public License along
  * with this program; if not, write to the Free Software Foundation, Inc.,
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
- *
  */
 
 #ifdef HAVE_CONFIG_H
@@ -40,7 +40,7 @@
 #include <errno.h>
 
 #include <liblttd/liblttd.h>
-#include <liblttd/liblttdutils.h>
+#include <liblttd/liblttdvfs.h>
 
 struct liblttd_instance* instance;
 
@@ -215,11 +215,12 @@ int main(int argc, char ** argv)
 		}
 	}
 
-	struct liblttd_callbacks* callbacks = liblttdutils_local_new_callbacks(
-		trace_name, append_mode, verbose_mode);
+	struct liblttd_callbacks* callbacks =
+		liblttdvfs_new_callbacks(trace_name, append_mode, verbose_mode);
 
 	instance = liblttd_new_instance(callbacks, channel_name, num_threads,
-		dump_flight_only, dump_normal_only, verbose_mode);
+					dump_flight_only, dump_normal_only,
+					verbose_mode);
 
 	if(!instance) {
 		perror("An error occured while creating the liblttd instance");

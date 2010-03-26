@@ -1,4 +1,4 @@
-/* libttd
+/* liblttd
  *
  * Linux Trace Toolkit Daemon
  *
@@ -12,6 +12,20 @@
  * Copyright 2010 -
  *	Michael Sills-Lavoie <michael.sills-lavoie@polymtl.ca>
  *	Oumarou Dicko <oumarou.dicko@polymtl.ca>
+ *
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this library; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
 #ifdef HAVE_CONFIG_H
@@ -96,14 +110,14 @@ int open_buffer_file(struct liblttd_instance *instance, char *filename,
 	int open_ret = 0;
 	int ret = 0;
 
-	if(strncmp(filename, "flight-", sizeof("flight-")-1) != 0) {
-		if(instance->dump_flight_only) {
+	if (strncmp(filename, "flight-", sizeof("flight-")-1) != 0) {
+		if (instance->dump_flight_only) {
 			printf_verbose("Skipping normal channel %s\n",
 				path_channel);
 			return 0;
 		}
 	} else {
-		if(instance->dump_normal_only) {
+		if (instance->dump_normal_only) {
 			printf_verbose("Skipping flight channel %s\n",
 				path_channel);
 			return 0;
@@ -117,17 +131,17 @@ int open_buffer_file(struct liblttd_instance *instance, char *filename,
 	/* Open the channel in read mode */
 	instance->fd_pairs.pair[instance->fd_pairs.num_pairs-1].channel =
 		open(path_channel, O_RDONLY | O_NONBLOCK);
-	if(instance->fd_pairs.pair[instance->fd_pairs.num_pairs-1].channel == -1) {
+	if (instance->fd_pairs.pair[instance->fd_pairs.num_pairs-1].channel == -1) {
 		perror(path_channel);
 		instance->fd_pairs.num_pairs--;
 		return 0;	/* continue */
 	}
 
-	if(instance->callbacks->on_open_channel) ret = instance->callbacks->on_open_channel(
+	if (instance->callbacks->on_open_channel) ret = instance->callbacks->on_open_channel(
 			instance->callbacks, &instance->fd_pairs.pair[instance->fd_pairs.num_pairs-1],
 			base_path_channel);
 
-	if(ret != 0) {
+	if (ret != 0) {
 		open_ret = -1;
 		close(instance->fd_pairs.pair[instance->fd_pairs.num_pairs-1].channel);
 		instance->fd_pairs.num_pairs--;
@@ -152,17 +166,17 @@ int open_channel_trace_pairs(struct liblttd_instance *instance,
 
 	int open_ret = 0;
 
-	if(channel_dir == NULL) {
+	if (channel_dir == NULL) {
 		perror(subchannel_name);
 		open_ret = ENOENT;
 		goto end;
 	}
 
 	printf_verbose("Calling : on new channels folder\n");
-	if(instance->callbacks->on_new_channels_folder) ret = instance->callbacks->
+	if (instance->callbacks->on_new_channels_folder) ret = instance->callbacks->
 			on_new_channels_folder(instance->callbacks,
 			base_subchannel_name);
-	if(ret == -1) {
+	if (ret == -1) {
 		open_ret = -1;
 		goto end;
 	}
@@ -192,27 +206,27 @@ int open_channel_trace_pairs(struct liblttd_instance *instance,
 
 	while((entry = readdir(channel_dir)) != NULL) {
 
-		if(entry->d_name[0] == '.') continue;
+		if (entry->d_name[0] == '.') continue;
 
 		strncpy(path_channel_ptr, entry->d_name, PATH_MAX - path_channel_len);
 
 		ret = stat(path_channel, &stat_buf);
-		if(ret == -1) {
+		if (ret == -1) {
 			perror(path_channel);
 			continue;
 		}
 
 		printf_verbose("Channel file : %s\n", path_channel);
 
-		if(S_ISDIR(stat_buf.st_mode)) {
+		if (S_ISDIR(stat_buf.st_mode)) {
 
 			printf_verbose("Entering channel subdirectory...\n");
 			ret = open_channel_trace_pairs(instance, path_channel, base_subchannel_ptr);
-			if(ret < 0) continue;
-		} else if(S_ISREG(stat_buf.st_mode)) {
+			if (ret < 0) continue;
+		} else if (S_ISREG(stat_buf.st_mode)) {
 			open_ret = open_buffer_file(instance, entry->d_name,
 				path_channel, base_subchannel_ptr);
-			if(open_ret)
+			if (open_ret)
 				goto end;
 		}
 	}
@@ -231,33 +245,33 @@ int read_subbuffer(struct liblttd_instance *instance, struct fd_pair *pair)
 	long ret;
 	off_t offset;
 
-
 	err = ioctl(pair->channel, RELAY_GET_SB, &consumed_old);
 	printf_verbose("cookie : %u\n", consumed_old);
-	if(err != 0) {
+	if (err != 0) {
 		ret = errno;
 		perror("Reserving sub buffer failed (everything is normal, it is due to concurrency)");
 		goto get_error;
 	}
 
 	err = ioctl(pair->channel, RELAY_GET_SB_SIZE, &len);
-	if(err != 0) {
+	if (err != 0) {
 		ret = errno;
 		perror("Getting sub-buffer len failed.");
 		goto get_error;
 	}
 
-	if(instance->callbacks->on_read_subbuffer) ret = instance->callbacks->on_read_subbuffer(
-		instance->callbacks, pair, len);
+	if (instance->callbacks->on_read_subbuffer)
+		ret = instance->callbacks->on_read_subbuffer(
+			instance->callbacks, pair, len);
 
 write_error:
 	ret = 0;
 	err = ioctl(pair->channel, RELAY_PUT_SB, &consumed_old);
-	if(err != 0) {
+	if (err != 0) {
 		ret = errno;
-		if(errno == EFAULT) {
+		if (errno == EFAULT) {
 			perror("Error in unreserving sub buffer\n");
-		} else if(errno == EIO) {
+		} else if (errno == EIO) {
 			/* Should never happen with newer LTTng versions */
 			perror("Reader has been pushed by the writer, last sub-buffer corrupted.");
 		}
@@ -274,7 +288,7 @@ int map_channels(struct liblttd_instance *instance, int idx_begin, int idx_end)
 	int i,j;
 	int ret=0;
 
-	if(instance->fd_pairs.num_pairs <= 0) {
+	if (instance->fd_pairs.num_pairs <= 0) {
 		printf("No channel to read\n");
 		goto end;
 	}
@@ -285,18 +299,18 @@ int map_channels(struct liblttd_instance *instance, int idx_begin, int idx_end)
 		struct fd_pair *pair = &instance->fd_pairs.pair[i];
 
 		ret = ioctl(pair->channel, RELAY_GET_N_SB, &pair->n_sb);
-		if(ret != 0) {
+		if (ret != 0) {
 			perror("Error in getting the number of sub-buffers");
 			goto end;
 		}
 		ret = ioctl(pair->channel, RELAY_GET_MAX_SB_SIZE,
 			    &pair->max_sb_size);
-		if(ret != 0) {
+		if (ret != 0) {
 			perror("Error in getting the max sub-buffer size");
 			goto end;
 		}
 		ret = pthread_mutex_init(&pair->mutex, NULL);	/* Fast mutex */
-		if(ret != 0) {
+		if (ret != 0) {
 			perror("Error in mutex init");
 			goto end;
 		}
@@ -317,7 +331,7 @@ int unmap_channels(struct liblttd_instance *instance)
 		int err_ret;
 
 		err_ret = pthread_mutex_destroy(&pair->mutex);
-		if(err_ret != 0) {
+		if (err_ret != 0) {
 			perror("Error in mutex destroy");
 		}
 		ret |= err_ret;
@@ -344,9 +358,9 @@ int read_inotify(struct liblttd_instance *instance)
 
 	offset = 0;
 	len = read(instance->inotify_fd, buf, sizeof(struct inotify_event) + PATH_MAX);
-	if(len < 0) {
+	if (len < 0) {
 
-		if(errno == EAGAIN)
+		if (errno == EAGAIN)
 			return 0;  /* another thread got the data before us */
 
 		printf("Error in read from inotify FD %s.\n", strerror(len));
@@ -355,7 +369,7 @@ int read_inotify(struct liblttd_instance *instance)
 	while(offset < len) {
 		ievent = (struct inotify_event *)&(buf[offset]);
 		for(i=0; i<instance->inotify_watch_array.num; i++) {
-			if(instance->inotify_watch_array.elem[i].wd == ievent->wd &&
+			if (instance->inotify_watch_array.elem[i].wd == ievent->wd &&
 				ievent->mask == IN_CREATE) {
 				printf_verbose(
 					"inotify wd %u event mask : %u for %s%s\n",
@@ -365,13 +379,13 @@ int read_inotify(struct liblttd_instance *instance)
 				old_num = instance->fd_pairs.num_pairs;
 				strcpy(path_channel, instance->inotify_watch_array.elem[i].path_channel);
 				strcat(path_channel, ievent->name);
-				if(ret = open_buffer_file(instance, ievent->name, path_channel,
+				if (ret = open_buffer_file(instance, ievent->name, path_channel,
 					path_channel + (instance->inotify_watch_array.elem[i].base_path_channel -
 					instance->inotify_watch_array.elem[i].path_channel))) {
 					printf("Error opening buffer file\n");
 					return -1;
 				}
-				if(ret = map_channels(instance, old_num, instance->fd_pairs.num_pairs)) {
+				if (ret = map_channels(instance, old_num, instance->fd_pairs.num_pairs)) {
 					printf("Error mapping channel\n");
 					return -1;
 				}
@@ -383,7 +397,8 @@ int read_inotify(struct liblttd_instance *instance)
 }
 #endif //HAS_INOTIFY
 
-/* read_channels
+/*
+ * read_channels
  *
  * Thread worker.
  *
@@ -448,11 +463,11 @@ int read_channels(struct liblttd_instance *instance, unsigned long thread_num)
 #endif //DEBUG
 
 		/* Have we received a signal ? */
-		if(instance->quit_program) break;
+		if (instance->quit_program) break;
 
 		num_rdy = poll(pollfd, num_pollfd, -1);
 
-		if(num_rdy == -1) {
+		if (num_rdy == -1) {
 			perror("Poll error");
 			goto free_fd;
 		}
@@ -511,7 +526,7 @@ int read_channels(struct liblttd_instance *instance, unsigned long thread_num)
 					break;
 				case POLLPRI:
 					pthread_rwlock_rdlock(&instance->fd_pairs_lock);
-					if(pthread_mutex_trylock(&instance->fd_pairs.pair[i-inotify_fds].mutex) == 0) {
+					if (pthread_mutex_trylock(&instance->fd_pairs.pair[i-inotify_fds].mutex) == 0) {
 						printf_verbose(
 							"Urgent read on fd %d\n",
 							pollfd[i].fd);
@@ -519,10 +534,10 @@ int read_channels(struct liblttd_instance *instance, unsigned long thread_num)
 						high_prio = 1;
 						/* it's ok to have an unavailable sub-buffer */
 						ret = read_subbuffer(instance, &instance->fd_pairs.pair[i-inotify_fds]);
-						if(ret == EAGAIN) ret = 0;
+						if (ret == EAGAIN) ret = 0;
 
 						ret = pthread_mutex_unlock(&instance->fd_pairs.pair[i-inotify_fds].mutex);
-						if(ret)
+						if (ret)
 							printf("Error in mutex unlock : %s\n", strerror(ret));
 					}
 					pthread_rwlock_unlock(&instance->fd_pairs_lock);
@@ -530,24 +545,24 @@ int read_channels(struct liblttd_instance *instance, unsigned long thread_num)
 			}
 		}
 		/* If every buffer FD has hung up, we end the read loop here */
-		if(num_hup == num_pollfd - inotify_fds) break;
+		if (num_hup == num_pollfd - inotify_fds) break;
 
-		if(!high_prio) {
+		if (!high_prio) {
 			for(i=inotify_fds;i<num_pollfd;i++) {
 				switch(pollfd[i].revents) {
 					case POLLIN:
 						pthread_rwlock_rdlock(&instance->fd_pairs_lock);
-						if(pthread_mutex_trylock(&instance->fd_pairs.pair[i-inotify_fds].mutex) == 0) {
+						if (pthread_mutex_trylock(&instance->fd_pairs.pair[i-inotify_fds].mutex) == 0) {
 							/* Take care of low priority channels. */
 							printf_verbose(
 								"Normal read on fd %d\n",
 								pollfd[i].fd);
 							/* it's ok to have an unavailable subbuffer */
 							ret = read_subbuffer(instance, &instance->fd_pairs.pair[i-inotify_fds]);
-							if(ret == EAGAIN) ret = 0;
+							if (ret == EAGAIN) ret = 0;
 
 							ret = pthread_mutex_unlock(&instance->fd_pairs.pair[i-inotify_fds].mutex);
-							if(ret)
+							if (ret)
 								printf("Error in mutex unlock : %s\n", strerror(ret));
 						}
 						pthread_rwlock_unlock(&instance->fd_pairs_lock);
@@ -558,7 +573,7 @@ int read_channels(struct liblttd_instance *instance, unsigned long thread_num)
 
 		/* Update pollfd array if an entry was added to fd_pairs */
 		pthread_rwlock_rdlock(&instance->fd_pairs_lock);
-		if((inotify_fds + instance->fd_pairs.num_pairs) != num_pollfd) {
+		if ((inotify_fds + instance->fd_pairs.num_pairs) != num_pollfd) {
 			pollfd = realloc(pollfd,
 					(inotify_fds + instance->fd_pairs.num_pairs) * sizeof(struct pollfd));
 			for(i=num_pollfd-inotify_fds;i<instance->fd_pairs.num_pairs;i++) {
@@ -595,11 +610,11 @@ void close_channel_trace_pairs(struct liblttd_instance *instance)
 
 	for(i=0;i<instance->fd_pairs.num_pairs;i++) {
 		ret = close(instance->fd_pairs.pair[i].channel);
-		if(ret == -1) perror("Close error on channel");
-		if(instance->callbacks->on_close_channel) {
+		if (ret == -1) perror("Close error on channel");
+		if (instance->callbacks->on_close_channel) {
 			ret = instance->callbacks->on_close_channel(
 				instance->callbacks, &instance->fd_pairs.pair[i]);
-			if(ret != 0) perror("Error on close channel callback");
+			if (ret != 0) perror("Error on close channel callback");
 		}
 	}
 	free(instance->fd_pairs.pair);
@@ -612,7 +627,7 @@ void * thread_main(void *arg)
 	long ret = 0;
 	struct liblttd_thread_data *thread_data = (struct liblttd_thread_data*) arg;
 
-	if(thread_data->instance->callbacks->on_new_thread)
+	if (thread_data->instance->callbacks->on_new_thread)
 		ret = thread_data->instance->callbacks->on_new_thread(
 		thread_data->instance->callbacks, thread_data->thread_num);
 
@@ -621,7 +636,7 @@ void * thread_main(void *arg)
 	}
 	ret = read_channels(thread_data->instance, thread_data->thread_num);
 
-	if(thread_data->instance->callbacks->on_close_thread)
+	if (thread_data->instance->callbacks->on_close_thread)
 		thread_data->instance->callbacks->on_close_thread(
 		thread_data->instance->callbacks, thread_data->thread_num);
 
@@ -637,7 +652,7 @@ int channels_init(struct liblttd_instance *instance)
 	instance->inotify_fd = inotify_init();
 	fcntl(instance->inotify_fd, F_SETFL, O_NONBLOCK);
 
-	if(ret = open_channel_trace_pairs(instance, instance->channel_name,
+	if (ret = open_channel_trace_pairs(instance, instance->channel_name,
 			instance->channel_name +
 			strlen(instance->channel_name)))
 		goto close_channel;
@@ -647,13 +662,13 @@ int channels_init(struct liblttd_instance *instance)
 		goto close_channel;
 	}
 
-	if(ret = map_channels(instance, 0, instance->fd_pairs.num_pairs))
+	if (ret = map_channels(instance, 0, instance->fd_pairs.num_pairs))
 		goto close_channel;
 	return 0;
 
 close_channel:
 	close_channel_trace_pairs(instance);
-	if(instance->inotify_fd >= 0)
+	if (instance->inotify_fd >= 0)
 		close(instance->inotify_fd);
 	return ret;
 }
@@ -672,10 +687,10 @@ int liblttd_start_instance(struct liblttd_instance *instance)
 	unsigned long i;
 	void *tret;
 
-	if(!instance)
+	if (!instance)
 		return -EINVAL;
 
-	if(ret = channels_init(instance))
+	if (ret = channels_init(instance))
 		return ret;
 
 	tids = malloc(sizeof(pthread_t) * instance->num_threads);
@@ -686,7 +701,7 @@ int liblttd_start_instance(struct liblttd_instance *instance)
 		thread_data->instance = instance;
 
 		ret = pthread_create(&tids[i], NULL, thread_main, thread_data);
-		if(ret) {
+		if (ret) {
 			perror("Error creating thread");
 			break;
 		}
@@ -694,11 +709,11 @@ int liblttd_start_instance(struct liblttd_instance *instance)
 
 	for(i=0; i<instance->num_threads; i++) {
 		ret = pthread_join(tids[i], &tret);
-		if(ret) {
+		if (ret) {
 			perror("Error joining thread");
 			break;
 		}
-		if((long)tret != 0) {
+		if ((long)tret != 0) {
 			printf("Error %s occured in thread %ld\n",
 				strerror((long)tret), i);
 		}
@@ -707,10 +722,10 @@ int liblttd_start_instance(struct liblttd_instance *instance)
 	free(tids);
 	ret = unmap_channels(instance);
 	close_channel_trace_pairs(instance);
-	if(instance->inotify_fd >= 0)
+	if (instance->inotify_fd >= 0)
 		close(instance->inotify_fd);
 
-	if(instance->callbacks->on_trace_end)
+	if (instance->callbacks->on_trace_end)
 		instance->callbacks->on_trace_end(instance);
 
 	delete_instance(instance);
@@ -723,12 +738,17 @@ struct liblttd_instance * liblttd_new_instance(
 	unsigned long n_threads, int flight_only, int normal_only, int verbose)
 {
 	struct liblttd_instance * instance;
-	if(!channel_path || !callbacks) return NULL;
-	if(n_threads == 0) n_threads = 1;
-	if(flight_only && normal_only) return NULL;
+
+	if (!channel_path || !callbacks)
+		return NULL;
+	if (n_threads == 0)
+		n_threads = 1;
+	if (flight_only && normal_only)
+		return NULL;
 
 	instance = malloc(sizeof(struct liblttd_instance));
-	if(!instance) return NULL;
+	if (!instance)
+		return NULL;
 
 	instance->callbacks = callbacks;
 
