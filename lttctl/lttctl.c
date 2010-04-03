@@ -696,9 +696,12 @@ setup_trace_fail:
 }
 
 /*
- * Start a lttd daemon to write trace datas
+ * Start a lttd daemon to write trace data
  * Dump overwrite channels on overwrite!=0
  * Dump normal(non-overwrite) channels on overwrite=0
+ *
+ * When called for overwrite mode, wait for lttd to return, so we are sure that
+ * trace session teardown is not executed before lttd can grab the buffer data.
  *
  * ret: 0 on success
  *      !0 on fail
@@ -760,8 +763,10 @@ static int lttctl_daemon(int overwrite)
 		}
 
 		/* -d option */
-		argv[argc] = "-d";
-		argc++;
+		if (!overwrite) {
+			argv[argc] = "-d";
+			argc++;
+		}
 
 		/* overwrite option */
 		if (overwrite) {
