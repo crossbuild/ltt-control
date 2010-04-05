@@ -763,10 +763,8 @@ static int lttctl_daemon(int overwrite)
 		}
 
 		/* -d option */
-		if (!overwrite) {
-			argv[argc] = "-d";
-			argc++;
-		}
+		argv[argc] = "-d";
+		argc++;
 
 		/* overwrite option */
 		if (overwrite) {
@@ -798,6 +796,16 @@ static int lttctl_daemon(int overwrite)
 
 	if (WEXITSTATUS(status))
 		fprintf(stderr, "lttd process running failed\n");
+
+	/*
+	 * FIXME
+	 * This is a temporary hack to ensure that the lttd daemon grabs
+	 * handles on the debugfs buffer files before we destroy the trace
+	 * session. Properly handling this will imply separating the "flush"
+	 * from the "destroy" operation at kernel-level in LTTng.
+	 */
+	if (overwrite)
+		sleep(2);
 
 	return WEXITSTATUS(status);
 }
