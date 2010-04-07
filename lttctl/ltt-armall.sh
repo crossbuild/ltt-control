@@ -1,4 +1,5 @@
 # Copyright (C) 2009 Benjamin Poirier
+# Copyright (C) 2010 Mathieu Desnoyers <mathieu.desnoyers@efficios.com>
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -14,7 +15,7 @@
 # with this program; if not, write to the Free Software Foundation, Inc.,
 # 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 
-DEBUGFSROOT=$(grep ^debugfs /proc/mounts | head -n 1 | awk '{print $2}')
+DEBUGFSROOT=$(awk '{if ($3 == "debugfs") print $2}' /proc/mounts | head -n 1)
 MARKERSROOT=${DEBUGFSROOT}/ltt/markers
 
 usage () {
