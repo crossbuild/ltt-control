@@ -27,6 +27,7 @@
 
 #include <pthread.h>
 #include <dirent.h>
+#include <fcntl.h>
 
 /**
  * struct fd_pair - Contains the data associated with the channel file
@@ -39,6 +40,7 @@
  * @mmap: Not used anymore.
  * @mutex: a mutex for internal library usage
  * @user_data: library user data
+ * @offset: write position in the output file descriptor (optional)
  */
 struct fd_pair {
 	int channel;
@@ -47,6 +49,7 @@ struct fd_pair {
 	void *mmap;
 	pthread_mutex_t	mutex;
 	void *user_data;
+	off_t offset;
 };
 
 struct channel_trace_fd {

@@ -109,6 +109,7 @@ int open_buffer_file(struct liblttd_instance *instance, char *filename,
 {
 	int open_ret = 0;
 	int ret = 0;
+	int fd;
 
 	if (strncmp(filename, "flight-", sizeof("flight-")-1) != 0) {
 		if (instance->dump_flight_only) {
@@ -129,8 +130,9 @@ int open_buffer_file(struct liblttd_instance *instance, char *filename,
 			++instance->fd_pairs.num_pairs * sizeof(struct fd_pair));
 
 	/* Open the channel in read mode */
-	instance->fd_pairs.pair[instance->fd_pairs.num_pairs-1].channel =
-		open(path_channel, O_RDONLY | O_NONBLOCK);
+	fd = open(path_channel, O_RDONLY | O_NONBLOCK);
+	instance->fd_pairs.pair[instance->fd_pairs.num_pairs-1].channel = fd;
+
 	if (instance->fd_pairs.pair[instance->fd_pairs.num_pairs-1].channel == -1) {
 		perror(path_channel);
 		instance->fd_pairs.num_pairs--;

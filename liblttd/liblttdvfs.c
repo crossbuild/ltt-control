@@ -35,7 +35,7 @@
 
 #define _REENTRANT
 #define _GNU_SOURCE
-
+#define _XOPEN_SOURCE 600
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -73,6 +73,7 @@ int liblttdvfs_on_open_channel(struct liblttd_callbacks *data, struct fd_pair *p
 	int ret;
 	struct stat stat_buf;
 	struct liblttdvfs_channel_data *channel_data;
+	off_t offset = 0;
 
 	pair->user_data = malloc(sizeof(struct liblttdvfs_channel_data));
 	channel_data = pair->user_data;
@@ -94,8 +95,8 @@ int liblttdvfs_on_open_channel(struct liblttd_callbacks *data, struct fd_pair *p
 				open_ret = -1;
 				goto end;
 			}
-			ret = lseek(channel_data->trace, 0, SEEK_END);
-			if (ret < 0) {
+			offset = lseek(channel_data->trace, 0, SEEK_END);
+			if (offset < 0) {
 				perror(callbacks_data->path_trace);
 				open_ret = -1;
 				close(channel_data->trace);
@@ -115,9 +116,13 @@ int liblttdvfs_on_open_channel(struct liblttd_callbacks *data, struct fd_pair *p
 				open_ret = -1;
 				goto end;
 			}
+			offset = 0;
+		} else {
+			perror("Channel output file open");
+			open_ret = -1;
+			goto end;
 		}
 	}
-
 end:
 	return open_ret;
 
@@ -157,6 +162,8 @@ int liblttdvfs_on_read_subbuffer(struct liblttd_callbacks *data, struct fd_pair 
 {
 	long ret;
 	off_t offset = 0;
+	off_t orig_offset = pair->offset;
+	int outfd = ((struct liblttdvfs_channel_data *)(pair->user_data))->trace;
 
 	struct liblttdvfs_data* callbacks_data = data->user_data;
 
@@ -168,20 +175,48 @@ int liblttdvfs_on_read_subbuffer(struct liblttd_callbacks *data, struct fd_pair 
 		printf_verbose("splice chan to pipe ret %ld\n", ret);
 		if (ret < 0) {
 			perror("Error in relay splice");
-			goto write_error;
+			goto write_end;
 		}
-		ret = splice(thread_pipe[0], NULL,
-			((struct liblttdvfs_channel_data *)(pair->user_data))->trace,
+		ret = splice(thread_pipe[0], NULL, outfd,
 			NULL, ret, SPLICE_F_MOVE | SPLICE_F_MORE);
 		printf_verbose("splice pipe to file %ld\n", ret);
 		if (ret < 0) {
 			perror("Error in file splice");
-			goto write_error;
+			goto write_end;
 		}
 		len -= ret;
-	}
+		/*
+		 * Give hints to the kernel about how we access the file:
+		 * POSIX_FADV_DONTNEED : we won't re-access data in a near
+		 * future after we write it.
+		 * We need to call fadvise again after the file grows because
+		 * the kernel does not seem to apply fadvise to non-existing
+		 * parts of the file.
+		 */
+		ret = posix_fadvise(outfd, 0, 0, POSIX_FADV_DONTNEED);
+		if (ret != 0) {
+			perror("fadvise");
+			/* Just a hint, not critical. Continue. */
+			ret = 0;
+		}
 
-write_error:
+		/* This won't block, but will start writeout asynchronously */
+		sync_file_range(outfd, pair->offset, ret,
+				SYNC_FILE_RANGE_WRITE);
+		pair->offset += ret;
+	}
+write_end:
+	/*
+	 * This does a blocking write-and-wait on any page that belongs to the
+	 * subbuffer prior to the one we just wrote.
+	 */
+	if (orig_offset >= pair->max_sb_size)
+		sync_file_range(outfd, orig_offset - pair->max_sb_size,
+				pair->max_sb_size,
+				SYNC_FILE_RANGE_WAIT_BEFORE
+				| SYNC_FILE_RANGE_WRITE
+				| SYNC_FILE_RANGE_WAIT_AFTER);
+	
 	return ret;
 }
 
