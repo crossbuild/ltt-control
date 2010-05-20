@@ -185,21 +185,6 @@ int liblttdvfs_on_read_subbuffer(struct liblttd_callbacks *data, struct fd_pair 
 			goto write_end;
 		}
 		len -= ret;
-		/*
-		 * Give hints to the kernel about how we access the file:
-		 * POSIX_FADV_DONTNEED : we won't re-access data in a near
-		 * future after we write it.
-		 * We need to call fadvise again after the file grows because
-		 * the kernel does not seem to apply fadvise to non-existing
-		 * parts of the file.
-		 */
-		ret = posix_fadvise(outfd, 0, 0, POSIX_FADV_DONTNEED);
-		if (ret != 0) {
-			perror("fadvise");
-			/* Just a hint, not critical. Continue. */
-			ret = 0;
-		}
-
 		/* This won't block, but will start writeout asynchronously */
 		sync_file_range(outfd, pair->offset, ret,
 				SYNC_FILE_RANGE_WRITE);
@@ -209,14 +194,31 @@ write_end:
 	/*
 	 * This does a blocking write-and-wait on any page that belongs to the
 	 * subbuffer prior to the one we just wrote.
+	 * Don't care about error values, as these are just hints and ways to
+	 * limit the amount of page cache used.
 	 */
-	if (orig_offset >= pair->max_sb_size)
+	if (orig_offset >= pair->max_sb_size) {
 		sync_file_range(outfd, orig_offset - pair->max_sb_size,
 				pair->max_sb_size,
 				SYNC_FILE_RANGE_WAIT_BEFORE
 				| SYNC_FILE_RANGE_WRITE
 				| SYNC_FILE_RANGE_WAIT_AFTER);
-	
+		/*
+		 * Give hints to the kernel about how we access the file:
+		 * POSIX_FADV_DONTNEED : we won't re-access data in a near
+		 * future after we write it.
+		 * We need to call fadvise again after the file grows because
+		 * the kernel does not seem to apply fadvise to non-existing
+		 * parts of the file.
+		 * Call fadvise _after_ having waited for the page writeback to
+		 * complete because the dirty page writeback semantic is not
+		 * well defined. So it can be expected to lead to lower
+		 * throughput in streaming.
+		 */
+		posix_fadvise(outfd, orig_offset - pair->max_sb_size,
+			      pair->max_sb_size, POSIX_FADV_DONTNEED);
+	}
+
 	return ret;
 }
 
