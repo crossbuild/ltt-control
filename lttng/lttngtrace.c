@@ -24,6 +24,7 @@
  *
  * TODO: LTTng should support per-session tracepoint activation.
  * TODO: use mkstemp() and save last trace name in user's home directory.
+ * TODO: drop priv + reenable standard signal handlers + call lttv at the end.
  */
 
 #include <errno.h>
