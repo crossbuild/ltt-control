@@ -53,6 +53,16 @@ static int autotrace;	/*
 			 * we unlink if needed ?
 			 */
 static int sigfwd_pid;
+static char *progname = NULL;
+
+void usage(void) {
+	fprintf(stderr, "usage : %s [-o trace_name] command\n", progname);
+	fprintf(stderr, "\nTracing tool for LTTng and UST\n\
+\n\
+Options:\n\
+	-o trace_name\t\tOutput file of the trace\n\
+");
+}
 
 static int recunlink(const char *dirname)
 {
@@ -152,7 +162,7 @@ static int write_child_pid(pid_t pid, uid_t uid, gid_t gid)
 		perror("Error writing child pid");
 		return -errno;
 	}
-	
+
 	fprintf(fp, "%u", (unsigned int) pid);
 	ret = fclose(fp);
 	if (ret)
@@ -164,32 +174,38 @@ static int write_child_pid(pid_t pid, uid_t uid, gid_t gid)
 	return ret;
 }
 
-static int parse_options(int argc, char *argv[], int *arg)
+static int parse_options(int argc, char **argv, int *arg)
 {
-	int ret = 0;
+	int i, c;
 
-	for (;;) {
-		if (*arg >= argc
-		    || argv[*arg][0] != '-'
-		    || argv[*arg][0] == '\0'
-		    || argv[*arg][1] == '\0'
-		    || !strcmp(argv[*arg], "--"))
-			break;
-		switch (argv[*arg][1]) {
-		case 'o':	if (*arg + 1 >= argc) {
-					printf("Missing -o trace name\n");
-					ret = -EINVAL;
-					break;
-				}
-				trace_path = argv[*arg + 1];
-				(*arg) += 2;
+	while ((c = getopt(argc, argv, "ho:")) != -1) {
+		switch (c) {
+			case 'o':
+				trace_path = strdup(optarg);
 				break;
-		default:	printf("Unknown option -%c\n", argv[*arg][1]);
-				ret = -EINVAL;
-				return ret;
+			case 'h':
+				usage();
+				exit(EXIT_SUCCESS);
+			case '?':
+				usage();
+				exit(EXIT_FAILURE);
+			default:
+				exit(EXIT_FAILURE);
 		}
 	}
-	return ret;
+
+	if (argc - optind > 0) {
+		for (i = optind + 1; i < argc; i++) {
+			printf ("Non-option argument %s\n", argv[i]);
+		}
+	} else {
+		usage();
+		exit(EXIT_FAILURE);
+	}
+
+	*arg = optind;
+
+	return 0;
 }
 
 static int init_trace_path(void)
@@ -264,8 +280,12 @@ int main(int argc, char *argv[])
 	int arg = 1;
 	sigset_t saved_mask;
 
-	if (argc < 2)
+	progname = argv[0];
+
+	if (argc < 2) {
+		usage();
 		return -ENOENT;
+	}
 
 	euid = geteuid();
 	uid = getuid();
@@ -273,7 +293,7 @@ int main(int argc, char *argv[])
 	gid = geteuid();
 
 	if (euid != 0 && uid != 0) {
-		printf("%s must be setuid root\n", argv[0]);
+		printf("%s must be setuid root\n", progname);
 		return -EPERM;
 	}
 
@@ -282,11 +302,9 @@ int main(int argc, char *argv[])
 	printf_dbg("egid: %d\n", egid);
 	printf_dbg("gid: %d\n", gid);
 
-	if (arg < argc) {
-		ret = parse_options(argc, argv, &arg);
-		if (ret)
-			return ret;
-	}
+	ret = parse_options(argc, argv, &arg);
+	if (ret)
+		return ret;
 
 	ret = init_trace_path();
 	gret = (gret == 0) ? ret : gret;
