@@ -25,6 +25,8 @@
  * TODO: LTTng should support per-session tracepoint activation.
  * TODO: use mkstemp() and save last trace name in user's home directory.
  * TODO: drop priv + reenable standard signal handlers + call lttv at the end.
+ * TODO: -o option should be limited to creation of files in locations that the
+ *       calling user has file creation access.
  */
 
 #include <errno.h>
